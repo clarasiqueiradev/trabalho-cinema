@@ -1,6 +1,5 @@
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -14,6 +13,9 @@ public class Cinema {
      * ================================================================== */
 
     public static void main(String[] args) {
+
+        int MIN_FILEIRAS = 5;
+        int MAX_FILEIRAS = 25;
         // Usa o padrão brasileiro nos números (vírgula decimal: R$ 15,00)
         Locale.setDefault(Locale.forLanguageTag("pt-BR"));
 
@@ -25,29 +27,34 @@ public class Cinema {
 
         // Dados iniciais do cinema (fileiras e assentos entre 5 e 25)
         double valorIngresso = lerDoublePositivo(teclado, "Valor do ingresso (R$): ");
-        int linhas = lerInteiro(teclado, "Quantidade de fileiras (5 a 25): ", 5, 25);
-        int colunas = lerInteiro(teclado, "Assentos por fileira (5 a 25): ", 5, 25);
+        int linhas = lerInteiro(teclado, "Digite a quantidade de fileiras (5 a 25): ", MIN_FILEIRAS, MAX_FILEIRAS,
+                "Quantidade inválida. Digite um número inteiro de 5 a 25.");
+        int colunas = lerInteiro(teclado, "Digite a quantidade de assentos por fileira (5 a 25): ", MIN_FILEIRAS, MAX_FILEIRAS,
+                "Quantidade inválida. Digite um número inteiro de 5 a 25.");
 
-        // Cria as matrizes da sala com todos os assentos livres
-        int[][] idades = new int[linhas][colunas];
-        char[][] sexos = new char[linhas][colunas];
-        limparReservas(idades, sexos);
+        // Cria a matriz da sala. Cada posição é um assento e guarda o sexo
+        // e a idade do ocupante no formato "sexo,idade" (ex.: "F,12").
+        // Assento livre guarda o texto vazio "".
+        String[][] assentos = new String[linhas][colunas];
+        limparReservas(assentos); // o Java cria a matriz com null; aqui vira "" (livre)
 
         int opcao;
         do {
             opcao = mostrarMenu(teclado);
+
             switch (opcao) {
-                case 1: carregarDados(teclado, idades, sexos); break;
-                case 2: consultarAssento(teclado, idades, sexos, valorIngresso); break;
-                case 3: reservarAssentos(teclado, idades, sexos); break;
-                case 4: liberarAssentos(teclado, idades, sexos); break;
-                case 5: mostrarMapa(idades); break;
-                case 6: menuRelatorios(teclado, idades, sexos, valorIngresso); break;
-                case 7: salvarDados(teclado, idades, sexos); break;
+                case 1: carregarDados(teclado, assentos); break;
+                case 2: consultarAssento(teclado, assentos, valorIngresso); break;
+                case 3: reservarAssentos(teclado, assentos); break;
+                case 4: liberarAssentos(teclado, assentos); break;
+                case 5: mostrarMapa(assentos); break;
+                case 6: menuRelatorios(teclado, assentos, valorIngresso); break;
+                case 7: salvarDados(teclado, assentos); break;
                 case 8: mostrarIntegrantes(); break;
                 case 9: System.out.println("\nEncerrando o programa. Até logo!"); break;
                 default: System.out.println("Opção inválida.");
             }
+
         } while (opcao != 9);
 
         teclado.close();
@@ -61,6 +68,7 @@ public class Cinema {
      * Mostra o menu principal e devolve a opção escolhida.
      */
     static int mostrarMenu(Scanner teclado) {
+
         System.out.println();
         System.out.println("============== MENU PRINCIPAL ==============");
         System.out.println(" 1. Carregar dados");
@@ -73,13 +81,15 @@ public class Cinema {
         System.out.println(" 8. Integrantes");
         System.out.println(" 9. Sair");
         System.out.println("============================================");
-        return lerInteiro(teclado, "Escolha uma opção: ", 1, 9);
+
+        return lerInteiro(teclado, "Escolha uma opção: ", 1, 9,
+                "Opção inválida. Digite um número de 1 a 9.");
     }
 
     /**
      * Submenu de relatórios (opção 6).
      */
-    static void menuRelatorios(Scanner teclado, int[][] idades, char[][] sexos, double valorIngresso) {
+    static void menuRelatorios(Scanner teclado, String[][] assentos, double valorIngresso) {
         String opcao;
         do {
             System.out.println();
@@ -91,13 +101,14 @@ public class Cinema {
             System.out.println(" v. Voltar ao menu principal");
             System.out.println("--------------------------------------------");
             System.out.print("Escolha uma opção: ");
+
             opcao = teclado.nextLine().trim().toLowerCase();
 
             switch (opcao) {
-                case "a": relatorioListagem(idades, sexos, valorIngresso); break;
-                case "b": relatorioOcupacao(idades); break;
-                case "c": relatorioPorSexo(idades, sexos); break;
-                case "d": relatorioGrafico(idades, valorIngresso); break;
+                case "a": relatorioListagem(assentos, valorIngresso); break;
+                case "b": relatorioOcupacao(assentos); break;
+                case "c": relatorioPorSexo(assentos); break;
+                case "d": relatorioGrafico(assentos, valorIngresso); break;
                 case "v": break;
                 default: System.out.println("Opção inválida.");
             }
@@ -109,42 +120,37 @@ public class Cinema {
      * ================================================================== */
 
     /**
-     * Lê um arquivo no formato "Assento,Sexo,Idade" e grava as reservas
-     * nas matrizes. Linhas inválidas ou fora da sala são ignoradas e
-     * informadas ao usuário.
+     * Carrega as reservas de um arquivo no formato "Assento,Sexo,Idade".
+     * Primeiro apaga todas as reservas atuais e depois grava as do arquivo.
+     * Linhas inválidas ou fora da sala são ignoradas e informadas ao usuário.
      */
-    static void carregarDados(Scanner teclado, int[][] idades, char[][] sexos) {
-        System.out.print("Nome do arquivo: ");
-        String nomeArquivo = limparNomeArquivo(teclado.nextLine());
+    static void carregarDados(Scanner teclado, String[][] assentos) {
+        // Pede o nome do arquivo até o usuário digitar com a extensão
+        String nomeArquivo;
+        do {
+            System.out.print("Digite o nome do arquivo com extensão, sem aspas (ex.: reservas.csv): ");
 
-        // Se não achou e o usuário não digitou extensão, tenta com ".csv"
-        if (procurarArquivo(nomeArquivo) == null && !nomeArquivo.contains(".")) {
-            nomeArquivo = nomeArquivo + ".csv";
-        }
-
-        File arquivo = procurarArquivo(nomeArquivo);
-        if (arquivo == null) {
-            System.out.println("Arquivo não encontrado: " + new File(nomeArquivo).getAbsolutePath());
-            System.out.println("O programa está rodando na pasta: " + System.getProperty("user.dir"));
-            System.out.println("Coloque o arquivo nessa pasta ou digite o caminho completo.");
-            return;
-        }
-        nomeArquivo = arquivo.getPath();
-        System.out.println("Lendo " + arquivo.getAbsolutePath());
-
-        if (lerSimNao(teclado, "Apagar as reservas atuais antes de carregar? (S/N): ")) {
-            limparReservas(idades, sexos);
-        }
+            nomeArquivo = teclado.nextLine().trim();
+            if (!nomeArquivo.contains(".")) {
+                System.out.println("Digite o nome do arquivo com a extensão, por exemplo: reservas.csv");
+            }
+        } while (!nomeArquivo.contains("."));
 
         int carregados = 0;
         int ignorados = 0;
         int numeroLinha = 0;
 
         try {
-            // Abre o arquivo para leitura usando um buffer
+            // Abre o arquivo para leitura usando um buffer.
+            // Se o arquivo não existir, vai direto para o catch
+            // e as reservas atuais não são apagadas.
             FileReader reader = new FileReader(nomeArquivo);
             BufferedReader buffer = new BufferedReader(reader);
 
+            // 1) Apaga todas as reservas atuais
+            limparReservas(assentos);
+
+            // 2) Grava as reservas lidas do arquivo
             buffer.readLine(); // descarta a linha do cabeçalho
             numeroLinha = 1;
 
@@ -158,7 +164,7 @@ public class Cinema {
                     continue; // pula linhas em branco
                 }
 
-                if (processarLinhaArquivo(linhaArquivo, idades, sexos)) {
+                if (processarLinhaArquivo(linhaArquivo, assentos)) {
                     carregados++;
                 } else {
                     System.out.println("  Linha " + numeroLinha + " ignorada: " + linhaArquivo);
@@ -170,40 +176,37 @@ public class Cinema {
             reader.close();
             System.out.println(carregados + " reserva(s) carregada(s). " + ignorados + " linha(s) ignorada(s).");
         } catch (IOException e) {
-            System.out.println("Erro ao ler o arquivo: " + e.getMessage());
+            System.out.println("Não foi possível ler o arquivo \"" + nomeArquivo
+                    + "\". Confira se o nome está certo e se o arquivo está na pasta do programa.");
         }
     }
 
     /**
      * Interpreta uma linha do arquivo ("A2,F,12") e grava a reserva.
-     * Devolve true se a linha era válida e o assento estava livre.
+     * Devolve true se a linha era válida.
      */
-    static boolean processarLinhaArquivo(String linhaArquivo, int[][] idades, char[][] sexos) {
+    static boolean processarLinhaArquivo(String linhaArquivo, String[][] assentos) {
         String[] partes = linhaArquivo.split(",");
         if (partes.length != 3) {
             return false;
         }
 
-        int[] assento = converterAssento(partes[0], idades.length, idades[0].length);
+        int[] assento = converterAssento(partes[0], assentos.length, assentos[0].length);
         char sexo = converterSexo(partes[1]);
-        int idade;
-        try {
-            idade = Integer.parseInt(partes[2].trim());
-        } catch (NumberFormatException e) {
+        String textoIdade = partes[2].trim();
+
+        if (assento == null || sexo == ' ' || !ehInteiro(textoIdade)) {
             return false;
         }
 
-        if (assento == null || sexo == ' ' || idade < 0 || idade > 120) {
+        int idade = Integer.parseInt(textoIdade);
+        if (idade > 150) {
             return false;
         }
 
-        int l = assento[0];
-        int c = assento[1];
-        if (estaReservado(idades, l, c)) {
-            return false; // não sobrescreve reserva já existente
-        }
-
-        reservar(idades, sexos, l, c, sexo, idade);
+        int linha = assento[0];
+        int coluna = assento[1];
+        reservar(assentos, linha, coluna, sexo, idade);
         return true;
     }
 
@@ -215,16 +218,17 @@ public class Cinema {
      * Mostra se um assento está livre ou reservado e, se reservado,
      * o sexo, a idade e o valor pago pelo ocupante.
      */
-    static void consultarAssento(Scanner teclado, int[][] idades, char[][] sexos, double valorIngresso) {
-        int[] assento = lerAssento(teclado, "Assento (ex.: F5): ", idades.length, idades[0].length);
-        int l = assento[0];
-        int c = assento[1];
-        String nome = nomeAssento(l, c);
+    static void consultarAssento(Scanner teclado, String[][] assentos, double valorIngresso) {
+        int[] assento = lerAssento(teclado, "Assento (ex.: F5): ", assentos.length, assentos[0].length);
+        int linha = assento[0];
+        int coluna = assento[1];
 
-        if (estaReservado(idades, l, c)) {
-            int idade = idades[l][c];
+        String nome = nomeAssento(linha, coluna);
+
+        if (estaReservado(assentos, linha, coluna)) {
+            int idade = obterIdade(assentos, linha, coluna);
             System.out.println("Assento " + nome + ": RESERVADO");
-            System.out.println("  Sexo : " + descricaoSexo(sexos[l][c]));
+            System.out.println("  Sexo : " + descricaoSexo(obterSexo(assentos, linha, coluna)));
             System.out.println("  Idade: " + idade + " anos");
             System.out.println("  Valor: " + formatarMoeda(calcularValor(idade, valorIngresso))
                     + " (" + categoriaIdade(idade) + ")");
@@ -241,37 +245,42 @@ public class Cinema {
      * Reserva n assentos consecutivos na mesma fileira a partir do
      * assento informado. Só reserva se todos estiverem disponíveis.
      */
-    static void reservarAssentos(Scanner teclado, int[][] idades, char[][] sexos) {
-        int colunas = idades[0].length;
-        int[] inicio = lerAssento(teclado, "Assento inicial (ex.: F5): ", idades.length, colunas);
-        int n = lerInteiro(teclado, "Quantidade de assentos: ", 1, colunas);
-        int l = inicio[0];
-        int c = inicio[1];
+    static void reservarAssentos(Scanner teclado, String[][] assentos) {
+        int colunas = assentos[0].length;
+        int[] inicio = lerAssento(teclado, "Assento inicial (ex.: F5): ", assentos.length, colunas);
+        int quantidade = lerInteiro(teclado, "Quantidade de assentos: ", 1, colunas,
+                "Quantidade inválida. Cada fileira tem " + colunas + " assentos, digite um número de 1 a " + colunas + ".");
+        int linha = inicio[0];
+        int colunaInicial = inicio[1];
+        int colunaFinal = colunaInicial + quantidade - 1;
 
-        // Verifica se os n assentos cabem na fileira
-        if (c + n > colunas) {
-            System.out.println("Não existem " + n + " assentos a partir de " + nomeAssento(l, c)
-                    + " (a fileira termina em " + nomeAssento(l, colunas - 1) + "). Nenhuma reserva feita.");
+        // Verifica se os assentos cabem na fileira
+        if (colunaFinal >= colunas) {
+            System.out.println("Não existem " + quantidade + " assentos a partir de " + nomeAssento(linha, colunaInicial)
+                    + " (a fileira termina em " + nomeAssento(linha, colunas - 1) + "). Nenhuma reserva feita.");
             return;
         }
 
         // Verifica se todos estão livres (sem sobreposição)
-        for (int i = c; i < c + n; i++) {
-            if (estaReservado(idades, l, i)) {
-                System.out.println("O assento " + nomeAssento(l, i)
+        for (int coluna = colunaInicial; coluna <= colunaFinal; coluna++) {
+            if (estaReservado(assentos, linha, coluna)) {
+                System.out.println("O assento " + nomeAssento(linha, coluna)
                         + " já está reservado. Nenhuma reserva feita.");
                 return;
             }
         }
 
         // Todos disponíveis: pede os dados de cada ocupante
-        for (int i = c; i < c + n; i++) {
-            System.out.println("-- Assento " + nomeAssento(l, i) + " --");
+        for (int coluna = colunaInicial; coluna <= colunaFinal; coluna++) {
+            System.out.println("-- Assento " + nomeAssento(linha, coluna) + " --");
+
             char sexo = lerSexo(teclado, "  Sexo (M/F): ");
-            int idade = lerInteiro(teclado, "  Idade: ", 0, 120);
-            reservar(idades, sexos, l, i, sexo, idade);
+            int idade = lerInteiro(teclado, "  Idade: ", 0, 150,
+                    "  Idade inválida. Digite a idade em anos, de 0 a 150.");
+            reservar(assentos, linha, coluna, sexo, idade);
         }
-        System.out.println(n + " assento(s) reservado(s) com sucesso.");
+
+        System.out.println(quantidade + " assento(s) reservado(s) com sucesso.");
     }
 
     /* ==================================================================
@@ -282,26 +291,28 @@ public class Cinema {
      * Libera n assentos consecutivos na mesma fileira a partir do
      * assento informado.
      */
-    static void liberarAssentos(Scanner teclado, int[][] idades, char[][] sexos) {
-        int colunas = idades[0].length;
-        int[] inicio = lerAssento(teclado, "Assento inicial (ex.: F5): ", idades.length, colunas);
-        int n = lerInteiro(teclado, "Quantidade de assentos: ", 1, colunas);
-        int l = inicio[0];
-        int c = inicio[1];
+    static void liberarAssentos(Scanner teclado, String[][] assentos) {
+        int colunas = assentos[0].length;
+        int[] inicio = lerAssento(teclado, "Assento inicial (ex.: F5): ", assentos.length, colunas);
+        int quantidade = lerInteiro(teclado, "Quantidade de assentos: ", 1, colunas,
+                "Quantidade inválida. Cada fileira tem " + colunas + " assentos, digite um número de 1 a " + colunas + ".");
+        int linha = inicio[0];
+        int colunaInicial = inicio[1];
+        int colunaFinal = colunaInicial + quantidade - 1;
 
-        if (c + n > colunas) {
-            System.out.println("Não existem " + n + " assentos a partir de " + nomeAssento(l, c)
+        if (colunaFinal >= colunas) {
+            System.out.println("Não existem " + quantidade + " assentos a partir de " + nomeAssento(linha, colunaInicial)
                     + ". Nenhum assento liberado.");
             return;
         }
 
         int liberados = 0;
-        for (int i = c; i < c + n; i++) {
-            if (estaReservado(idades, l, i)) {
-                liberar(idades, sexos, l, i);
+        for (int coluna = colunaInicial; coluna <= colunaFinal; coluna++) {
+            if (estaReservado(assentos, linha, coluna)) {
+                liberar(assentos, linha, coluna);
                 liberados++;
             } else {
-                System.out.println("  Assento " + nomeAssento(l, i) + " já estava liberado.");
+                System.out.println("  Assento " + nomeAssento(linha, coluna) + " já estava liberado.");
             }
         }
         System.out.println(liberados + " reserva(s) liberada(s).");
@@ -314,22 +325,22 @@ public class Cinema {
     /**
      * Mostra o mapa da sala: "·" para liberado e "X" para reservado.
      */
-    static void mostrarMapa(int[][] idades) {
+    static void mostrarMapa(String[][] assentos) {
         System.out.println();
         System.out.println("Mapa de ocupação do cinema: (\"X\" = reservado e \"·\" = liberado)");
 
         // Cabeçalho com o número das colunas
         System.out.print("  ");
-        for (int c = 0; c < idades[0].length; c++) {
-            System.out.printf(" %02d", c + 1);
+        for (int coluna = 0; coluna < assentos[0].length; coluna++) {
+            System.out.printf(" %02d", coluna + 1);
         }
         System.out.println();
 
         // Uma linha por fileira
-        for (int l = 0; l < idades.length; l++) {
-            System.out.print(letraFileira(l) + " ");
-            for (int c = 0; c < idades[0].length; c++) {
-                if (estaReservado(idades, l, c)) {
+        for (int linha = 0; linha < assentos.length; linha++) {
+            System.out.print(letraFileira(linha) + " ");
+            for (int coluna = 0; coluna < assentos[0].length; coluna++) {
+                if (estaReservado(assentos, linha, coluna)) {
                     System.out.print("  X");
                 } else {
                     System.out.print("  ·");
@@ -346,8 +357,8 @@ public class Cinema {
     /**
      * a) Tabela com todas as reservas: assento, sexo, idade e valor.
      */
-    static void relatorioListagem(int[][] idades, char[][] sexos, double valorIngresso) {
-        if (contarReservados(idades) == 0) {
+    static void relatorioListagem(String[][] assentos, double valorIngresso) {
+        if (contarReservados(assentos) == 0) {
             System.out.println("Nenhuma reserva cadastrada.");
             return;
         }
@@ -356,12 +367,12 @@ public class Cinema {
         System.out.println(separador);
         System.out.println("| Assento | Sexo      | Idade | Valor      |");
         System.out.println(separador);
-        for (int l = 0; l < idades.length; l++) {
-            for (int c = 0; c < idades[0].length; c++) {
-                if (estaReservado(idades, l, c)) {
-                    int idade = idades[l][c];
+        for (int linha = 0; linha < assentos.length; linha++) {
+            for (int coluna = 0; coluna < assentos[0].length; coluna++) {
+                if (estaReservado(assentos, linha, coluna)) {
+                    int idade = obterIdade(assentos, linha, coluna);
                     System.out.printf("| %-7s | %-9s | %5d | %10s |%n",
-                            nomeAssento(l, c), descricaoSexo(sexos[l][c]),
+                            nomeAssento(linha, coluna), descricaoSexo(obterSexo(assentos, linha, coluna)),
                             idade, formatarMoeda(calcularValor(idade, valorIngresso)));
                 }
             }
@@ -372,9 +383,9 @@ public class Cinema {
     /**
      * b) Total de assentos, divididos entre liberados e reservados.
      */
-    static void relatorioOcupacao(int[][] idades) {
-        int total = idades.length * idades[0].length;
-        int reservados = contarReservados(idades);
+    static void relatorioOcupacao(String[][] assentos) {
+        int total = assentos.length * assentos[0].length;
+        int reservados = contarReservados(assentos);
         int liberados = total - reservados;
 
         System.out.println("Total de assentos : " + total);
@@ -385,13 +396,13 @@ public class Cinema {
     /**
      * c) Quantidade de reservas por sexo.
      */
-    static void relatorioPorSexo(int[][] idades, char[][] sexos) {
+    static void relatorioPorSexo(String[][] assentos) {
         int masculino = 0;
         int feminino = 0;
-        for (int l = 0; l < idades.length; l++) {
-            for (int c = 0; c < idades[0].length; c++) {
-                if (estaReservado(idades, l, c)) {
-                    if (sexos[l][c] == 'M') {
+        for (int linha = 0; linha < assentos.length; linha++) {
+            for (int coluna = 0; coluna < assentos[0].length; coluna++) {
+                if (estaReservado(assentos, linha, coluna)) {
+                    if (obterSexo(assentos, linha, coluna) == 'M') {
                         masculino++;
                     } else {
                         feminino++;
@@ -410,15 +421,15 @@ public class Cinema {
      * d) Gráfico de pagantes por faixa (meia menor, inteira, meia idoso)
      * com quantidade, percentual, valor arrecadado e receita total.
      */
-    static void relatorioGrafico(int[][] idades, double valorIngresso) {
+    static void relatorioGrafico(String[][] assentos, double valorIngresso) {
         int qtdMenor = 0, qtdInteira = 0, qtdIdoso = 0;
         double valorMenor = 0, valorInteira = 0, valorIdoso = 0;
 
         // Soma quantidade e valor de cada faixa
-        for (int l = 0; l < idades.length; l++) {
-            for (int c = 0; c < idades[0].length; c++) {
-                if (estaReservado(idades, l, c)) {
-                    int idade = idades[l][c];
+        for (int linha = 0; linha < assentos.length; linha++) {
+            for (int coluna = 0; coluna < assentos[0].length; coluna++) {
+                if (estaReservado(assentos, linha, coluna)) {
+                    int idade = obterIdade(assentos, linha, coluna);
                     double valor = calcularValor(idade, valorIngresso);
                     if (idade <= 17) {
                         qtdMenor++;
@@ -449,20 +460,20 @@ public class Cinema {
      * Meia menor:  6 - 25,0% |=====---------------| R$ 90,00
      */
     static void imprimirLinhaGrafico(String rotulo, int quantidade, int total, double valor) {
-        double pct = percentual(quantidade, total);
+        double porcentagem = percentual(quantidade, total);
         System.out.printf("%s: %3d - %5.1f%% |%s| %s%n",
-                rotulo, quantidade, pct, montarBarra(pct), formatarMoeda(valor));
+                rotulo, quantidade, porcentagem, montarBarra(porcentagem), formatarMoeda(valor));
     }
 
     /**
      * Monta a barra do gráfico com "=" proporcional ao percentual e "-"
      * completando o restante. A barra tem 20 caracteres (100%).
      */
-    static String montarBarra(double pct) {
-        int cheios = (int) Math.round(pct / 100.0 * 20);
+    static String montarBarra(double porcentagem) {
+        int cheios = (int) Math.round(porcentagem / 100.0 * 20);
         String barra = "";
-        for (int i = 0; i < 20; i++) {
-            if (i < cheios) {
+        for (int posicao = 0; posicao < 20; posicao++) {
+            if (posicao < cheios) {
                 barra = barra + "=";
             } else {
                 barra = barra + "-";
@@ -479,13 +490,16 @@ public class Cinema {
      * Salva as reservas no formato "Assento,Sexo,Idade" (mesmo formato
      * lido pela opção 1).
      */
-    static void salvarDados(Scanner teclado, int[][] idades, char[][] sexos) {
-        System.out.print("Nome do arquivo: ");
-        String nomeArquivo = limparNomeArquivo(teclado.nextLine());
-        if (nomeArquivo.isEmpty()) {
-            System.out.println("Nome de arquivo vazio. Nada foi salvo.");
-            return;
-        }
+    static void salvarDados(Scanner teclado, String[][] assentos) {
+        // Pede o nome do arquivo até o usuário digitar com a extensão
+        String nomeArquivo;
+        do {
+            System.out.print("Nome do arquivo com extensão, sem aspas (ex.: reservas.csv): ");
+            nomeArquivo = teclado.nextLine().trim();
+            if (!nomeArquivo.contains(".")) {
+                System.out.println("Digite o nome do arquivo com a extensão, por exemplo: reservas.csv");
+            }
+        } while (!nomeArquivo.contains("."));
 
         try {
             // Abre o arquivo para escrita (false = sobrescreve, não faz append)
@@ -496,12 +510,13 @@ public class Cinema {
             buffer.write("Assento,Sexo,Idade");
             buffer.newLine();
 
-            // Uma linha por assento reservado, ex.: "A2,F,12"
+            // Uma linha por assento reservado: nome do assento + o que está
+            // guardado na matriz. Ex.: "A2" + "," + "F,12" = "A2,F,12"
             int salvos = 0;
-            for (int l = 0; l < idades.length; l++) {
-                for (int c = 0; c < idades[0].length; c++) {
-                    if (estaReservado(idades, l, c)) {
-                        String registro = String.format("%s,%c,%d", nomeAssento(l, c), sexos[l][c], idades[l][c]);
+            for (int linha = 0; linha < assentos.length; linha++) {
+                for (int coluna = 0; coluna < assentos[0].length; coluna++) {
+                    if (estaReservado(assentos, linha, coluna)) {
+                        String registro = nomeAssento(linha, coluna) + "," + assentos[linha][coluna];
                         buffer.write(registro);
                         buffer.newLine();
                         salvos++;
@@ -510,7 +525,7 @@ public class Cinema {
             }
 
             buffer.close(); // descarrega o buffer no arquivo e fecha
-            System.out.println(salvos + " reserva(s) salva(s) em " + new File(nomeArquivo).getAbsolutePath());
+            System.out.println(salvos + " reserva(s) salva(s) em " + nomeArquivo);
         } catch (IOException e) {
             System.out.println("Erro ao salvar o arquivo: " + e.getMessage());
         }
@@ -524,55 +539,64 @@ public class Cinema {
      * Mostra o nome dos integrantes do grupo.
      */
     static void mostrarIntegrantes() {
-        // Nomes dos integrantes do grupo (editar antes da entrega)
         String[] integrantes = {
-            "Maria Clara Siqueira",
-            "Integrante 2",
-            "Integrante 3",
+                "Maria Clara Siqueira",
+                "Nicolas renana jablonski",
+                "Henry de Lima Coitinho",
         };
 
         System.out.println("Integrantes do grupo:");
-        for (int i = 0; i < integrantes.length; i++) {
-            System.out.println("  " + (i + 1) + ". " + integrantes[i]);
+        for (int posicao = 0; posicao < integrantes.length; posicao++) {
+            System.out.println("  " + (posicao + 1) + ". " + integrantes[posicao]);
         }
     }
 
     /* ==================================================================
-     * Funções de manipulação das matrizes
+     * Funções de manipulação da matriz de assentos
      * ================================================================== */
 
     /** Marca todos os assentos como livres. */
-    static void limparReservas(int[][] idades, char[][] sexos) {
-        for (int l = 0; l < idades.length; l++) {
-            for (int c = 0; c < idades[0].length; c++) {
-                liberar(idades, sexos, l, c);
+    static void limparReservas(String[][] assentos) {
+        for (int linha = 0; linha < assentos.length; linha++) {
+            for (int coluna = 0; coluna < assentos[0].length; coluna++) {
+                liberar(assentos, linha, coluna);
             }
         }
     }
 
-    /** Grava uma reserva no assento (l, c). */
-    static void reservar(int[][] idades, char[][] sexos, int l, int c, char sexo, int idade) {
-        sexos[l][c] = sexo;
-        idades[l][c] = idade;
+    /** Grava a reserva no assento, no formato "sexo,idade" (ex.: "F,12"). */
+    static void reservar(String[][] assentos, int linha, int coluna, char sexo, int idade) {
+        assentos[linha][coluna] = sexo + "," + idade;
     }
 
-    /** Libera o assento (l, c). */
-    static void liberar(int[][] idades, char[][] sexos, int l, int c) {
-        sexos[l][c] = ' ';
-        idades[l][c] = -1; // -1 marca o assento como livre
+    /** Libera o assento (texto vazio = livre). */
+    static void liberar(String[][] assentos, int linha, int coluna) {
+        assentos[linha][coluna] = "";
     }
 
-    /** Indica se o assento (l, c) está reservado (idade diferente de -1). */
-    static boolean estaReservado(int[][] idades, int l, int c) {
-        return idades[l][c] != -1;
+    /** Indica se o assento está reservado (texto diferente de vazio). */
+    static boolean estaReservado(String[][] assentos, int linha, int coluna) {
+        return !assentos[linha][coluna].equals("");
+    }
+
+    /** Sexo do ocupante: primeira parte do texto "F,12" -> 'F'. */
+    static char obterSexo(String[][] assentos, int linha, int coluna) {
+        String[] partes = assentos[linha][coluna].split(",");
+        return partes[0].charAt(0);
+    }
+
+    /** Idade do ocupante: segunda parte do texto "F,12" -> 12. */
+    static int obterIdade(String[][] assentos, int linha, int coluna) {
+        String[] partes = assentos[linha][coluna].split(",");
+        return Integer.parseInt(partes[1]);
     }
 
     /** Conta quantos assentos estão reservados. */
-    static int contarReservados(int[][] idades) {
+    static int contarReservados(String[][] assentos) {
         int total = 0;
-        for (int l = 0; l < idades.length; l++) {
-            for (int c = 0; c < idades[0].length; c++) {
-                if (estaReservado(idades, l, c)) {
+        for (int linha = 0; linha < assentos.length; linha++) {
+            for (int coluna = 0; coluna < assentos[0].length; coluna++) {
+                if (estaReservado(assentos, linha, coluna)) {
                     total++;
                 }
             }
@@ -604,20 +628,41 @@ public class Cinema {
 
     /* ==================================================================
      * Funções de conversão e formatação
+     * ------------------------------------------------------------------
+     * O enunciado pede que o usuário informe o assento como letra da
+     * fileira + número do assento (ex.: F5), mas a matriz só tem posições
+     * numéricas que começam em 0. Por isso convertemos nos dois sentidos:
+     *
+     *     usuário "F5"  <->  assentos[5][4]
+     *
+     * Letra <-> número: no Java cada char é guardado como um número
+     * (código ASCII). As letras maiúsculas são sequenciais: 'A' = 65,
+     * 'B' = 66, ..., 'F' = 70. Então a "distância" de uma letra até o 'A'
+     * é o número da fileira:  'F' - 'A' = 70 - 65 = 5.
+     *
+     * Número do assento: o usuário conta de 1 em diante e a matriz de 0,
+     * por isso subtraímos 1 na entrada (5 -> 4) e somamos 1 na saída.
      * ================================================================== */
 
-    /** Letra da fileira (0 -> 'A', 1 -> 'B', ...). */
-    static char letraFileira(int l) {
-        return (char) ('A' + l);
-    }
-
-    /** Nome do assento (l, c) no formato "F5". */
-    static String nomeAssento(int l, int c) {
-        return letraFileira(l) + String.valueOf(c + 1);
+    /**
+     * Número da fileira -> letra (0 -> 'A', 1 -> 'B', 5 -> 'F', ...).
+     * 'A' + 5 dá o número 70; o (char) transforma esse número de volta em letra.
+     */
+    static char letraFileira(int linha) {
+        return (char) ('A' + linha);
     }
 
     /**
-     * Converte um texto como "F5" em {linha, coluna} (índices da matriz).
+     * Posição da matriz -> nome do assento para mostrar ao usuário.
+     * Ex.: linha 5, coluna 4 -> "F5" (soma 1 porque a matriz começa em 0).
+     */
+    static String nomeAssento(int linha, int coluna) {
+        return letraFileira(linha) + String.valueOf(coluna + 1);
+    }
+
+    /**
+     * Nome do assento digitado pelo usuário -> posição da matriz.
+     * Ex.: "F5" -> {5, 4}, porque 'F' - 'A' = 5 e 5 - 1 = 4.
      * Devolve null se o texto for inválido ou estiver fora da sala.
      */
     static int[] converterAssento(String texto, int linhas, int colunas) {
@@ -626,52 +671,21 @@ public class Cinema {
             return null;
         }
 
-        int l = texto.charAt(0) - 'A';
-        int c;
-        try {
-            c = Integer.parseInt(texto.substring(1)) - 1;
-        } catch (NumberFormatException e) {
-            return null;
-        }
+        // Letra da fileira -> número da linha ('F' - 'A' = 5)
+        int linha = texto.charAt(0) - 'A';
 
-        if (l < 0 || l >= linhas || c < 0 || c >= colunas) {
+        // O resto do texto é o número do assento ("5"); a matriz começa em 0
+        String textoColuna = texto.substring(1);
+        if (!ehInteiro(textoColuna)) {
             return null;
         }
-        int[] assento = { l, c };
+        int coluna = Integer.parseInt(textoColuna) - 1;
+
+        if (linha < 0 || linha >= linhas || coluna < 0 || coluna >= colunas) {
+            return null;
+        }
+        int[] assento = { linha, coluna };
         return assento;
-    }
-
-    /**
-     * Procura o arquivo na pasta onde o programa está rodando e, se não
-     * achar, nas subpastas dela (útil quando a IDE roda o programa a partir
-     * da pasta "de cima" do projeto). Devolve null se não encontrar.
-     */
-    static File procurarArquivo(String nomeArquivo) {
-        File arquivo = new File(nomeArquivo);
-        if (arquivo.isFile()) {
-            return arquivo;
-        }
-        if (arquivo.isAbsolute()) {
-            return null; // caminho completo errado: não adianta procurar
-        }
-
-        File[] itens = new File(System.getProperty("user.dir")).listFiles();
-        if (itens != null) {
-            for (int i = 0; i < itens.length; i++) {
-                if (itens[i].isDirectory()) {
-                    File candidato = new File(itens[i], nomeArquivo);
-                    if (candidato.isFile()) {
-                        return candidato;
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
-    /** Remove espaços e aspas do nome de arquivo digitado. */
-    static String limparNomeArquivo(String texto) {
-        return texto.trim().replace("\"", "").replace("'", "").trim();
     }
 
     /** Converte "M"/"F" em caractere; devolve ' ' se inválido. */
@@ -708,20 +722,20 @@ public class Cinema {
      * Funções de leitura com validação
      * ================================================================== */
 
-    /** Lê um inteiro entre min e max, repetindo até ser válido. */
-    static int lerInteiro(Scanner teclado, String mensagem, int min, int max) {
+    /** Lê um inteiro entre min e max; se for inválido, mostra mensagemErro e pede de novo. */
+    static int lerInteiro(Scanner teclado, String mensagem, int min, int max, String mensagemErro) {
         while (true) {
             System.out.print(mensagem);
             String entrada = teclado.nextLine().trim();
-            try {
+
+            if (ehInteiro(entrada)) {
                 int valor = Integer.parseInt(entrada);
                 if (valor >= min && valor <= max) {
                     return valor;
                 }
-            } catch (NumberFormatException e) {
-                // cai na mensagem de erro abaixo
             }
-            System.out.println("Valor inválido. Digite um número entre " + min + " e " + max + ".");
+
+            System.out.println(mensagemErro);
         }
     }
 
@@ -730,16 +744,59 @@ public class Cinema {
         while (true) {
             System.out.print(mensagem);
             String entrada = teclado.nextLine().trim().replace(",", ".");
-            try {
+
+            if (ehNumeroReal(entrada)) {
                 double valor = Double.parseDouble(entrada);
                 if (valor > 0) {
                     return valor;
                 }
-            } catch (NumberFormatException e) {
-                // cai na mensagem de erro abaixo
             }
+
             System.out.println("Valor inválido. Digite um número maior que zero.");
         }
+    }
+
+    /**
+     * Verifica se o texto é um número inteiro sem sinal (só dígitos).
+     * Limita a 9 dígitos para o número caber em um int.
+     */
+    static boolean ehInteiro(String texto) {
+        if (texto.length() == 0 || texto.length() > 9) {
+            return false;
+        }
+
+        for (int posicao = 0; posicao < texto.length(); posicao++) {
+            char caractere = texto.charAt(posicao);
+            if (caractere < '0' || caractere > '9') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Verifica se o texto é um número real sem sinal, como "30" ou "22.50"
+     * (só dígitos e no máximo um ponto).
+     */
+    static boolean ehNumeroReal(String texto) {
+        if (texto.length() == 0 || texto.length() > 12) {
+            return false;
+        }
+
+        int pontos = 0;
+        int digitos = 0;
+
+        for (int posicao = 0; posicao < texto.length(); posicao++) {
+            char caractere = texto.charAt(posicao);
+            if (caractere == '.') {
+                pontos++;
+            } else if (caractere >= '0' && caractere <= '9') {
+                digitos++;
+            } else {
+                return false;
+            }
+        }
+        return pontos <= 1 && digitos > 0;
     }
 
     /** Lê um assento válido (ex.: F5), repetindo até ser válido. */
@@ -758,27 +815,14 @@ public class Cinema {
     /** Lê o sexo (M ou F), repetindo até ser válido. */
     static char lerSexo(Scanner teclado, String mensagem) {
         while (true) {
+
             System.out.print(mensagem);
             char sexo = converterSexo(teclado.nextLine());
             if (sexo != ' ') {
                 return sexo;
             }
-            System.out.println("Sexo inválido. Digite M ou F.");
-        }
-    }
 
-    /** Lê uma resposta S/N e devolve true para "S". */
-    static boolean lerSimNao(Scanner teclado, String mensagem) {
-        while (true) {
-            System.out.print(mensagem);
-            String resposta = teclado.nextLine().trim().toUpperCase();
-            if (resposta.equals("S")) {
-                return true;
-            }
-            if (resposta.equals("N")) {
-                return false;
-            }
-            System.out.println("Digite S ou N.");
+            System.out.println("Sexo inválido. Digite M ou F.");
         }
     }
 }
